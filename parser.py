@@ -1,6 +1,10 @@
 import sys
 import numpy as np
+import pandas as pd
+import csv
 import matplotlib.pyplot as plt
+from sklearn import datasets, linear_model
+from sklearn.metrics import mean_squared_error, r2_score
 
 def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcript_quant, show_graph):
     print("Number of transcripts : ", len(bootstrap_transcript_ids))
@@ -12,8 +16,18 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcr
 
     valid_transcripts = open("valid_transcripts", "w")
     invalid_transcripts = open("invalid_transcripts", "w")
+    data_file = open("regression_data.csv", "w")
+    writer = csv.writer(data_file)
+
+    input_size = 1000
+    input_count = 0
 
     for key in mean_map.keys():
+        ##### For running on smaller input size
+        input_count += 1
+        if input_count == input_size:
+            break
+
         if key in transcript_truth_count:
             mu, sigma = mean_map[key] # mean and standard deviation
             s = np.random.normal(mu, sigma, 1000)
@@ -30,10 +44,58 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcr
             row = key + "\t" + str(meanValue) + "\t" + str(mu - 2 * sigma) \
                     + "\t" + str(mu) + "\t" + str(mu + 2*sigma) + "\n"
             print("Running for key - ", key, " with row - ", row)
+            data_row = [transcript_quant[key][0], transcript_quant[key][1], transcript_quant[key][2], transcript_quant[key][3]]
             if meanValue > mu - 2*sigma and meanValue < mu + 2*sigma :
                 valid_transcripts.write(row)
+                success = [1]
+                success.extend(data_row)
+                writer.writerow(success)
             else:
                 invalid_transcripts.write(row)
+                failure = [0]
+                failure.extend(data_row)
+                writer.writerow(failure)
+    
+    data_file.close()
+    #################   Run Linear Regression Model  ######################
+    #reg_file = open("regression_data.csv", "rb")
+    characters = pd.read_csv("regression_data.csv")
+
+    characters_X = characters.iloc[:, 1:]
+    # Split the data into training/testing sets
+    characters_X_train = characters_X[:-20]
+    characters_X_test = characters_X[-20:]
+    
+    characters_Y = characters.iloc[:,:1]    
+    # Split the targets into training/testing sets
+    characters_y_train = characters_Y[:-20]
+    characters_y_test = characters_Y[-20:]
+
+    # Create linear regression object
+    regr = linear_model.LinearRegression()
+
+    # Train the model using the training sets
+    regr.fit(characters_X_train, characters_y_train)
+
+    # Make predictions using the testing set
+    characters_y_pred = regr.predict(characters_X_test)
+
+    # The coefficients
+    print('Coefficients: \n', regr.coef_)
+    # The mean squared error
+    print("Mean squared error: %.2f"
+                  % mean_squared_error(characters_y_test, characters_y_pred))
+    # Explained variance score: 1 is perfect prediction
+    print('Variance score: %.2f' % r2_score(characters_y_test, characters_y_pred))
+
+    # Plot outputs
+    plt.scatter(characters_X_test, characters_y_test,  color='black')
+    plt.plot(characters_X_test, characters_y_pred, color='blue', linewidth=3)
+
+    plt.xticks(())
+    plt.yticks(())
+
+    plt.show()
 
 def get_quant_map(quant_file):
     print("Parsing Quant File - ", quant_file)
