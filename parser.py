@@ -44,7 +44,7 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcr
             row = key + "\t" + str(meanValue) + "\t" + str(mu - 2 * sigma) \
                     + "\t" + str(mu) + "\t" + str(mu + 2*sigma) + "\n"
             print("Running for key - ", key, " with row - ", row)
-            data_row = [transcript_quant[key][0], transcript_quant[key][1], transcript_quant[key][2], transcript_quant[key][3]]
+            data_row = [transcript_quant[key][2]]
             if meanValue > mu - 2*sigma and meanValue < mu + 2*sigma :
                 valid_transcripts.write(row)
                 success = [1]
@@ -147,18 +147,65 @@ def get_poly_truth_count(truth_value_file):
             transcript_truth_count[pair[0]] = int(pair[1])
     return transcript_truth_count
 
+#converts index given in equivalence classes to transcript ID
+def ActualTranscriptMap(temp, Transcripts):
+    for i in  range(1, len(temp)-1):
+        temp[i] = Transcripts[int(temp[i])-3]
+    return temp
+
+def get_equivalence_class(equivalence_class_file):
+    AllArray=[]
+    print("Parsing Equivalence classes File - ", equivalence_class_file)
+    file = open(equivalence_class_file ,"r") 
+    print("got the file")
+    temp=''
+    count=0
+    for line in file:
+        temp=''
+        temp+=line.rstrip()
+        AllArray.append(temp)
+    TranscriptInNumOfClassesDict={}
+    #filling the transcripts
+    Transcripts=[]
+    lTranscripts= int(AllArray[0])
+    lClasses = int(AllArray[1])
+
+    Transcripts = AllArray[2:2+lTranscripts]
+    equiValenceClasses= []
+    count =0
+    for i in range(2+lTranscripts, len(AllArray)):
+        # print AllArray[i]
+        temp=[]
+        temp = AllArray[i].split("\t");
+        # print temp
+        ActualTranscriptMap(temp, Transcripts)
+        # print temp
+        # break
+        for i in range(1, len(temp)-1):
+            if temp[i] in TranscriptInNumOfClassesDict:
+                TranscriptInNumOfClassesDict[temp[i]] = TranscriptInNumOfClassesDict[temp[i]] +1
+            else:
+                TranscriptInNumOfClassesDict[temp[i]] = 1
+        equiValenceClasses.append(temp)
+
+    return(TranscriptInNumOfClassesDict,equiValenceClasses)
+
 
 if __name__ == "__main__":
     boot_strap_file = "poly_mo/quant_bootstraps.tsv"
     truth_value_file = "poly_mo/poly_truth.tsv"
     quant_file = "poly_mo/quant.sf"
+    equivalence_class_file = "poly_mo/eq_classes.txt"
 
     transcript_quant = get_quant_map(quant_file)
     bootstarp_transcript_ids, count_matrix = get_bootstrap_transcript_info(boot_strap_file)
     transcript_truth_count = get_poly_truth_count(truth_value_file)
+    TranscriptInNumOfClassesDict,equiValenceClasses = get_equivalence_class(equivalence_class_file)
+    print(TranscriptInNumOfClassesDict)
     
     show_graph = False
     if len(sys.argv) == 2:
         show_graph = True
 
     main(bootstarp_transcript_ids, count_matrix, transcript_truth_count, transcript_quant, show_graph)
+
