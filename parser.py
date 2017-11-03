@@ -19,7 +19,7 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcr
     data_file = open("regression_data.csv", "w")
     writer = csv.writer(data_file)
 
-    input_size = 1000
+    input_size = 100
     input_count = 0
 
     for key in mean_map.keys():
@@ -44,7 +44,7 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcr
             row = key + "\t" + str(meanValue) + "\t" + str(mu - 2 * sigma) \
                     + "\t" + str(mu) + "\t" + str(mu + 2*sigma) + "\n"
             print("Running for key - ", key, " with row - ", row)
-            data_row = [transcript_quant[key][2]]
+            data_row = [transcript_quant[key][2], transcript_quant[key][3]]
             if meanValue > mu - 2*sigma and meanValue < mu + 2*sigma :
                 valid_transcripts.write(row)
                 success = [1]
@@ -58,8 +58,7 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcr
     
     data_file.close()
     #################   Run Linear Regression Model  ######################
-    #reg_file = open("regression_data.csv", "rb")
-    characters = pd.read_csv("regression_data.csv")
+    characters = pd.read_csv("regression_data.csv", header=None)
 
     characters_X = characters.iloc[:, 1:]
     # Split the data into training/testing sets
@@ -89,7 +88,7 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcr
     print('Variance score: %.2f' % r2_score(characters_y_test, characters_y_pred))
 
     # Plot outputs
-    plt.scatter(characters_X_test, characters_y_test,  color='black')
+    plt.scatter(characters_X_test.iloc[:,0], characters_y_test,  color='black')
     plt.plot(characters_X_test, characters_y_pred, color='blue', linewidth=3)
 
     plt.xticks(())
@@ -157,7 +156,6 @@ def get_equivalence_class(equivalence_class_file):
     AllArray=[]
     print("Parsing Equivalence classes File - ", equivalence_class_file)
     file = open(equivalence_class_file ,"r") 
-    print("got the file")
     temp=''
     count=0
     for line in file:
@@ -174,13 +172,9 @@ def get_equivalence_class(equivalence_class_file):
     equiValenceClasses= []
     count =0
     for i in range(2+lTranscripts, len(AllArray)):
-        # print AllArray[i]
         temp=[]
         temp = AllArray[i].split("\t");
-        # print temp
         ActualTranscriptMap(temp, Transcripts)
-        # print temp
-        # break
         for i in range(1, len(temp)-1):
             if temp[i] in TranscriptInNumOfClassesDict:
                 TranscriptInNumOfClassesDict[temp[i]] = TranscriptInNumOfClassesDict[temp[i]] +1
@@ -201,7 +195,6 @@ if __name__ == "__main__":
     bootstarp_transcript_ids, count_matrix = get_bootstrap_transcript_info(boot_strap_file)
     transcript_truth_count = get_poly_truth_count(truth_value_file)
     TranscriptInNumOfClassesDict,equiValenceClasses = get_equivalence_class(equivalence_class_file)
-    print(TranscriptInNumOfClassesDict)
     
     show_graph = False
     if len(sys.argv) == 2:
