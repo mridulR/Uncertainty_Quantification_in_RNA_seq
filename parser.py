@@ -36,6 +36,10 @@ def get_covariance(mean_map, transcript_quant, TranscriptInNumOfClassesDict):
     print("Equivalence class size ", len(y_eq_class))
     print("Co-relation for eq class", np.corrcoef(x_num_eq_class, y_eq_class)[0][1])
 
+    return (np.corrcoef(x_tpm, y)[0][1], np.corrcoef(x_effec_len, y)[0][1], \
+            np.corrcoef(x_tpm, y)[0][1], np.corrcoef(x_no_of_reads, y)[0][1],\
+            np.corrcoef(x_num_eq_class, y_eq_class)[0][1])
+
 
 def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
         transcript_quant, show_graph, TranscriptInNumOfClassesDict):
@@ -46,7 +50,7 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
         col = count_matrix[bootstrap_transcript_ids[ind]]
         mean_map[bootstrap_transcript_ids[ind]] = [np.mean(col), np.std(col)]
 
-    get_covariance(mean_map, transcript_quant, TranscriptInNumOfClassesDict)
+    corr = get_covariance(mean_map, transcript_quant, TranscriptInNumOfClassesDict)
 
     valid_transcripts = open("valid_transcripts", "w")
     invalid_transcripts = open("invalid_transcripts", "w")
@@ -75,7 +79,11 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
             row = key + "\t" + str(meanValue) + "\t" + str(mu - 2 * sigma) \
                     + "\t" + str(mu) + "\t" + str(mu + 2*sigma) + "\n"
             #print("Running for key - ", key, " with row - ", row)
-            data_row = [TranscriptInNumOfClassesDict[key]]
+            data_row = [float(corr[4]) * int(TranscriptInNumOfClassesDict[key]),\
+                    float(transcript_quant[key][0]) * float(corr[0]), \
+                    float(transcript_quant[key][1]) * float(corr[1]), \
+                    float(transcript_quant[key][2]) * float(corr[2]), \
+                    float(transcript_quant[key][3]) * float(corr[3]) ]
             if meanValue > mu - 2*sigma and meanValue < mu + 2*sigma :
                 valid_transcripts.write(row)
                 success = [1]
@@ -95,40 +103,20 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
 
     character_labels = np.array([labels.index(x) for x in character_labels])
     all_features = characters.iloc[:,1:]
-    train_features = all_features[:-20]
+    train_features = all_features[:-200]
     train_features = np.array(train_features)
 
     classifier = svm.SVC()
-    classifier.fit(train_features, character_labels[:-20])
+    classifier.fit(train_features, character_labels[:-200])
 
-    results = classifier.predict(all_features[-20:])
-    num_correct = (results == character_labels[-20:]).sum()
-    recall = num_correct / len(character_labels)
+    results = classifier.predict(all_features[-200:])
+    num_correct = (results == character_labels[-200:]).sum()
+    recall = num_correct / len(character_labels[-200:])
     print("model accuracy (%): ", recall * 100, "%")
 
-    
-    
-    '''
-    # Create linear regression object
-    regr = linear_model.LinearRegression()
-
-    # Train the model using the training sets
-    regr.fit(characters_X_train, characters_y_train)
-
-    # Make predictions using the testing set
-    characters_y_pred = regr.predict(characters_X_test)
-
-    # The coefficients
-    print('Coefficients: \n', regr.coef_)
-    # The mean squared error
-    print("Mean squared error: %.2f"
-                  % mean_squared_error(characters_y_test, characters_y_pred))
-    # Explained variance score: 1 is perfect prediction
-    print('Variance score: %.2f' % r2_score(characters_y_test, characters_y_pred))
-    '''
     # Plot outputs
     #plt.scatter(all_features[-20:][:, 0], characters.iloc[:,:1][-20:] ,  color='black')
-    plt.plot(all_features[-20:], results, color='blue', linewidth=3)
+    plt.plot(all_features[-200:], results, color='blue', linewidth=3)
 
     plt.xticks(())
     plt.yticks(())
@@ -148,8 +136,8 @@ def get_quant_map(quant_file):
             row = line.strip().replace("\n", "").split("\t")
             length = int(row[1])
             effective_length = float(row[2])
-            tpm = float(row[2])
-            num_of_reads = float(row[2])
+            tpm = float(row[3])
+            num_of_reads = float(row[4])
             transcript_quant[row[0]] = (length, effective_length, tpm, num_of_reads)
     return transcript_quant
 
