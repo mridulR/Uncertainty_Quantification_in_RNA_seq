@@ -4,7 +4,7 @@ import pandas as pd
 import csv
 import matplotlib.pyplot as plt
 from sklearn import linear_model
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn import svm
 from sklearn.metrics import mean_squared_error, r2_score
 
 def get_covariance(mean_map, transcript_quant, TranscriptInNumOfClassesDict):
@@ -52,6 +52,7 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
     invalid_transcripts = open("invalid_transcripts", "w")
     data_file = open("regression_data.csv", "w")
     writer = csv.writer(data_file)
+    writer.writerow(["valid", "tpm", "reads", "len", "eff_len"])
 
     input_size = 40000
     input_count = 0
@@ -92,25 +93,26 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
     
     data_file.close()
     #################   Run Regression/Classification Model  ######################
-    characters = pd.read_csv("regression_data.csv", header=None)
+    characters = pd.read_csv("regression_data.csv")
+    character_labels = characters.valid
+    labels = list(set(character_labels))
 
-    characters_X = characters.iloc[:, 1:]
-    # Split the data into training/testing sets
-    characters_X_train = characters_X[:-20]
-    characters_X_test = characters_X[-20:]
-    
-    characters_Y = characters.iloc[:,:1]    
-    # Split the targets into training/testing sets
-    characters_y_train = characters_Y[:-20]
-    characters_y_test = characters_Y[-20:]
+    character_labels = np.array([labels.index(x) for x in character_labels])
+    all_features = characters.iloc[:,1:]
+    train_features = all_features[:-20]
+    train_features = np.array(train_features)
 
-    knn = KNeighborsClassifier()
-    knn.fit(characters_X_train, characters_y_train)
-    #KNeighborsClassifier(algorithm='auto', leaf_size=30, metric='minkowski',
-    #                   metric_params=None, n_jobs=1, n_neighbors=5, p=2,
-    #                              weights='uniform')
+    print("*******************")
+    print(len(train_features))
+    print(len(character_labels))
 
-    characters_y_pred = knn.predict(characters_X_test)
+    classifier = svm.SVC()
+    classifier.fit(train_features, character_labels[:-20])
+
+    results = classifier.predict(all_features[-20:])
+    num_correct = (results == character_labels[-20:]).sum()
+    recall = num_correct / len(character_labels)
+    print("model accuracy (%): ", recall * 100, "%")
 
     
     
@@ -133,8 +135,8 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
     print('Variance score: %.2f' % r2_score(characters_y_test, characters_y_pred))
     '''
     # Plot outputs
-    plt.scatter(characters_X_test.iloc[:,0], characters_y_test,  color='black')
-    plt.plot(characters_X_test, characters_y_pred, color='blue', linewidth=3)
+    #plt.scatter(all_features[-20:][:, 0], characters.iloc[:,:1][-20:] ,  color='black')
+    plt.plot(all_features[-20:], results, color='blue', linewidth=3)
 
     plt.xticks(())
     plt.yticks(())
