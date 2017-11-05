@@ -3,10 +3,42 @@ import numpy as np
 import pandas as pd
 import csv
 import matplotlib.pyplot as plt
-from sklearn import datasets, linear_model
+from sklearn import linear_model
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import mean_squared_error, r2_score
 
-def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcript_quant, show_graph):
+def get_covariance(mean_map, transcript_quant, TranscriptInNumOfClassesDict):
+    x_len = []
+    x_effec_len = []
+    x_tpm = []
+    x_no_of_reads = []
+    y = []
+    y_eq_class = []
+    x_num_eq_class = []
+
+    for transcriptId in mean_map.keys():
+        if transcriptId in TranscriptInNumOfClassesDict.keys():
+            y_eq_class.append(mean_map[transcriptId][0])
+            x_num_eq_class.append(TranscriptInNumOfClassesDict[transcriptId])
+        if transcriptId in transcript_quant.keys():
+            y.append(mean_map[transcriptId][0])
+            x_len.append(transcript_quant[transcriptId][0])
+            x_effec_len.append(transcript_quant[transcriptId][1])
+            x_tpm.append(transcript_quant[transcriptId][2])
+            x_no_of_reads.append(transcript_quant[transcriptId][3])
+    print("*******************************************************")
+    print("No of datas for covarience calculation : ", len(y))
+    print("Co-relation length", np.corrcoef(x_len, y)[0][1]) 
+    print("Co-relation effective length", np.corrcoef(x_effec_len, y)[0][1])
+    print("Co-relation tpm", np.corrcoef(x_tpm, y)[0][1])
+    print("Co-relation num od reads", np.corrcoef(x_no_of_reads, y)[0][1])
+
+    print("Equivalence class size ", len(y_eq_class))
+    print("Co-relation for eq class", np.corrcoef(x_num_eq_class, y_eq_class)[0][1])
+
+
+def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
+        transcript_quant, show_graph, TranscriptInNumOfClassesDict):
     print("Number of transcripts : ", len(bootstrap_transcript_ids))
     print("Length of the true reads", len(transcript_truth_count))
     mean_map = {}
@@ -14,12 +46,14 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcr
         col = count_matrix[bootstrap_transcript_ids[ind]]
         mean_map[bootstrap_transcript_ids[ind]] = [np.mean(col), np.std(col)]
 
+    get_covariance(mean_map, transcript_quant, TranscriptInNumOfClassesDict)
+
     valid_transcripts = open("valid_transcripts", "w")
     invalid_transcripts = open("invalid_transcripts", "w")
     data_file = open("regression_data.csv", "w")
     writer = csv.writer(data_file)
 
-    input_size = 100
+    input_size = 40000
     input_count = 0
 
     for key in mean_map.keys():
@@ -30,21 +64,21 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcr
 
         if key in transcript_truth_count:
             mu, sigma = mean_map[key] # mean and standard deviation
-            s = np.random.normal(mu, sigma, 1000)
+            '''s = np.random.normal(mu, sigma, 1000)
             count, bins, ignored = plt.hist(s, 30, normed=True)
             plt.plot(bins, 1/(sigma * np.sqrt(2 * np.pi)) *
                             np.exp( - (bins - mu)**2 / (2 * sigma**2) ),
-                linewidth=1, color='r')
+                linewidth=1, color='r')'''
             meanValue = transcript_truth_count[key]
-            if show_graph:
+            '''if show_graph:
                 plt.axvline(x=meanValue,linewidth=2, color='k')  
                 plt.axvline(x=mu+2*sigma,linewidth=2, color='g')
                 plt.axvline(x=mu-2*sigma,linewidth=2, color='g')
-                plt.show()
+                plt.show()'''
             row = key + "\t" + str(meanValue) + "\t" + str(mu - 2 * sigma) \
                     + "\t" + str(mu) + "\t" + str(mu + 2*sigma) + "\n"
-            print("Running for key - ", key, " with row - ", row)
-            data_row = [transcript_quant[key][2], transcript_quant[key][3]]
+            #print("Running for key - ", key, " with row - ", row)
+            data_row = [transcript_quant[key][2], transcript_quant[key][3], transcript_quant[key][0], transcript_quant[key][1]]
             if meanValue > mu - 2*sigma and meanValue < mu + 2*sigma :
                 valid_transcripts.write(row)
                 success = [1]
@@ -57,7 +91,7 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcr
                 writer.writerow(failure)
     
     data_file.close()
-    #################   Run Linear Regression Model  ######################
+    #################   Run Regression/Classification Model  ######################
     characters = pd.read_csv("regression_data.csv", header=None)
 
     characters_X = characters.iloc[:, 1:]
@@ -70,6 +104,17 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcr
     characters_y_train = characters_Y[:-20]
     characters_y_test = characters_Y[-20:]
 
+    knn = KNeighborsClassifier()
+    knn.fit(characters_X_train, characters_y_train)
+    #KNeighborsClassifier(algorithm='auto', leaf_size=30, metric='minkowski',
+    #                   metric_params=None, n_jobs=1, n_neighbors=5, p=2,
+    #                              weights='uniform')
+
+    characters_y_pred = knn.predict(characters_X_test)
+
+    
+    
+    '''
     # Create linear regression object
     regr = linear_model.LinearRegression()
 
@@ -86,7 +131,7 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcr
                   % mean_squared_error(characters_y_test, characters_y_pred))
     # Explained variance score: 1 is perfect prediction
     print('Variance score: %.2f' % r2_score(characters_y_test, characters_y_pred))
-
+    '''
     # Plot outputs
     plt.scatter(characters_X_test.iloc[:,0], characters_y_test,  color='black')
     plt.plot(characters_X_test, characters_y_pred, color='blue', linewidth=3)
@@ -95,6 +140,7 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, transcr
     plt.yticks(())
 
     plt.show()
+    
 
 def get_quant_map(quant_file):
     print("Parsing Quant File - ", quant_file)
@@ -200,5 +246,5 @@ if __name__ == "__main__":
     if len(sys.argv) == 2:
         show_graph = True
 
-    main(bootstarp_transcript_ids, count_matrix, transcript_truth_count, transcript_quant, show_graph)
+    main(bootstarp_transcript_ids, count_matrix, transcript_truth_count, transcript_quant, show_graph, TranscriptInNumOfClassesDict)
 
