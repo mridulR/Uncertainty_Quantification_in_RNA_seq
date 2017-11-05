@@ -52,16 +52,12 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
     invalid_transcripts = open("invalid_transcripts", "w")
     data_file = open("regression_data.csv", "w")
     writer = csv.writer(data_file)
-    writer.writerow(["valid", "tpm", "reads", "len", "eff_len"])
-
-    input_size = 40000
-    input_count = 0
+    writer.writerow(["valid", "count"])
 
     for key in mean_map.keys():
         ##### For running on smaller input size
-        input_count += 1
-        if input_count == input_size:
-            break
+        if key not in TranscriptInNumOfClassesDict:
+            continue
 
         if key in transcript_truth_count:
             mu, sigma = mean_map[key] # mean and standard deviation
@@ -79,7 +75,7 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
             row = key + "\t" + str(meanValue) + "\t" + str(mu - 2 * sigma) \
                     + "\t" + str(mu) + "\t" + str(mu + 2*sigma) + "\n"
             #print("Running for key - ", key, " with row - ", row)
-            data_row = [transcript_quant[key][2], transcript_quant[key][3], transcript_quant[key][0], transcript_quant[key][1]]
+            data_row = [TranscriptInNumOfClassesDict[key]]
             if meanValue > mu - 2*sigma and meanValue < mu + 2*sigma :
                 valid_transcripts.write(row)
                 success = [1]
@@ -101,10 +97,6 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
     all_features = characters.iloc[:,1:]
     train_features = all_features[:-20]
     train_features = np.array(train_features)
-
-    print("*******************")
-    print(len(train_features))
-    print(len(character_labels))
 
     classifier = svm.SVC()
     classifier.fit(train_features, character_labels[:-20])
