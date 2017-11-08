@@ -27,39 +27,45 @@ def get_corelation(mean_map, transcript_quant, TranscriptInNumOfClassesDict):
             x_tpm.append(transcript_quant[transcriptId][2])
             x_no_of_reads.append(transcript_quant[transcriptId][3])
     print("*******************************************************")
-    print("No of datas for covarience calculation : ", len(y))
+    print("Data for covarience calculation : ", len(y))
     print("Co-relation length", np.corrcoef(x_len, y)[0][1]) 
     print("Co-relation effective length", np.corrcoef(x_effec_len, y)[0][1])
     print("Co-relation tpm", np.corrcoef(x_tpm, y)[0][1])
-    print("Co-relation num od reads", np.corrcoef(x_no_of_reads, y)[0][1])
+    print("Co-relation num of reads", np.corrcoef(x_no_of_reads, y)[0][1])
 
     print("Equivalence class size ", len(y_eq_class))
     print("Co-relation for eq class", np.corrcoef(x_num_eq_class, y_eq_class)[0][1])
+    print("*******************************************************")
 
     return (np.corrcoef(x_len, y)[0][1], np.corrcoef(x_effec_len, y)[0][1], \
             np.corrcoef(x_tpm, y)[0][1], np.corrcoef(x_no_of_reads, y)[0][1],\
             np.corrcoef(x_num_eq_class, y_eq_class)[0][1])
 
-
-def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
-        transcript_quant, show_graph, TranscriptInNumOfClassesDict):
-    print("Number of transcripts : ", len(bootstrap_transcript_ids))
-    print("Length of the true reads", len(transcript_truth_count))
+def get_mean_and_standard_deviation(bootstrap_transcript_ids):
     mean_map = {}
     for ind in range(0, len(bootstrap_transcript_ids)):
         col = count_matrix[bootstrap_transcript_ids[ind]]
         mean_map[bootstrap_transcript_ids[ind]] = [np.mean(col), np.std(col)]
+    return mean_map
 
-    corr = get_corelation(mean_map, transcript_quant, TranscriptInNumOfClassesDict)
-
+def write_calculated_data_to_files(mean_map, corr, test_data_count):
     valid_transcripts = open("valid_transcripts", "w")
     invalid_transcripts = open("invalid_transcripts", "w")
     data_file = open("regression_data.csv", "w")
     writer = csv.writer(data_file)
-    writer.writerow(["valid", "count", "A", "B", "C", "D"])
+    writer.writerow(["valid", "count", "tpm", "num_of_reads"])
 
+    total_count = 0
+    for key in mean_map.keys():
+        if key not in TranscriptInNumOfClassesDict:
+            continue
+        if key in transcript_truth_count:
+            total_count += 1
+
+    current_count = 0
     for key in mean_map.keys():
         ##### For running on smaller input size
+
         if key not in TranscriptInNumOfClassesDict:
             continue
 
@@ -79,11 +85,29 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
             row = key + "\t" + str(meanValue) + "\t" + str(mu - 2 * sigma) \
                     + "\t" + str(mu) + "\t" + str(mu + 2*sigma) + "\n"
             #print("Running for key - ", key, " with row - ", row)
-            data_row = [float(corr[4]) * int(TranscriptInNumOfClassesDict[key]),\
-                    float(transcript_quant[key][0]) * float(corr[0]), \
-                    float(transcript_quant[key][1]) * float(corr[1]), \
-                    float(transcript_quant[key][2]) * float(corr[2]), \
-                    float(transcript_quant[key][3]) * float(corr[3]) ]
+            current_count += 1
+            if current_count < total_count - test_data_count :
+                data_row = [
+                        ##### equivalence class count for transcript_id
+                        int(TranscriptInNumOfClassesDict[key]), \
+                        #float(transcript_quant[key][0]), \      
+                        #float(transcript_quant[key][1]), \
+                        #### tpm #####
+                        float(transcript_quant[key][2]), \
+                        ### number_of_reads ####
+                        float(transcript_quant[key][3]) \
+                        ]
+            else:
+               tfactor_count = 1
+               tfactor_tpm = 1
+               tfactor_no_of_reads = 1
+               data_row = [
+                        tfactor_count * int(TranscriptInNumOfClassesDict[key]),\
+                        #float(transcript_quant[key][0]), \
+                        #float(transcript_quant[key][1]), \
+                        tfactor_tpm * float(transcript_quant[key][2]), \
+                        tfactor_no_of_reads * float(transcript_quant[key][3]) \
+                        ] 
             if meanValue > mu - 2*sigma and meanValue < mu + 2*sigma :
                 valid_transcripts.write(row)
                 success = [1]
@@ -94,8 +118,20 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
                 failure = [0]
                 failure.extend(data_row)
                 writer.writerow(failure)
-    
+
     data_file.close()
+
+    
+def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
+        transcript_quant, show_graph, TranscriptInNumOfClassesDict):
+    print("Number of transcripts : ", len(bootstrap_transcript_ids))
+    print("Given number of the true reads", len(transcript_truth_count))
+ 
+    mean_map = get_mean_and_standard_deviation(bootstrap_transcript_ids)
+    corr = get_corelation(mean_map, transcript_quant, TranscriptInNumOfClassesDict)
+    test_data_count = 2000
+    write_calculated_data_to_files(mean_map, corr, test_data_count)
+    
     #################   Run Regression/Classification Model  ######################
     characters = pd.read_csv("regression_data.csv")
     character_labels = characters.valid
@@ -103,20 +139,20 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
 
     character_labels = np.array([labels.index(x) for x in character_labels])
     all_features = characters.iloc[:,1:]
-    train_features = all_features[:-2000]
+    train_features = all_features[:-test_data_count]
     train_features = np.array(train_features)
 
     classifier = svm.SVC()
-    classifier.fit(train_features, character_labels[:-2000])
+    classifier.fit(train_features, character_labels[:-test_data_count])
 
-    results = classifier.predict(all_features[-2000:])
-    num_correct = (results == character_labels[-2000:]).sum()
-    recall = num_correct / len(character_labels[-2000:])
+    results = classifier.predict(all_features[-test_data_count:])
+    num_correct = (results == character_labels[-test_data_count:]).sum()
+    recall = num_correct / len(character_labels[-test_data_count:])
     print("model accuracy (%): ", recall * 100, "%")
 
     # Plot outputs
     #plt.scatter(all_features[-20:][:, 0], characters.iloc[:,:1][-20:] ,  color='black')
-    plt.plot(all_features[-2000:], results, color='blue', linewidth=3)
+    plt.plot(all_features[-test_data_count:], results, color='blue', linewidth=3)
 
     plt.xticks(())
     plt.yticks(())
@@ -181,27 +217,28 @@ def ActualTranscriptMap(temp, Transcripts):
     return temp
 
 def get_equivalence_class(equivalence_class_file):
-    AllArray=[]
     print("Parsing Equivalence classes File - ", equivalence_class_file)
-    file = open(equivalence_class_file ,"r") 
-    temp=''
+    equivalence_file = open(equivalence_class_file ,"r")
+    all_lines = [] 
+    each_line = ''
     count=0
-    for line in file:
-        temp=''
-        temp+=line.rstrip()
-        AllArray.append(temp)
+    for line in equivalence_file:
+        each_line = ''
+        each_line += line.rstrip()
+        all_lines.append(each_line)
+    equivalence_file.close()
     TranscriptInNumOfClassesDict={}
     #filling the transcripts
     Transcripts=[]
-    lTranscripts= int(AllArray[0])
-    lClasses = int(AllArray[1])
+    lTranscripts= int(all_lines[0])
+    lClasses = int(all_lines[1])
 
-    Transcripts = AllArray[2:2+lTranscripts]
+    Transcripts = all_lines[2:2+lTranscripts]
     equiValenceClasses= []
     count =0
-    for i in range(2+lTranscripts, len(AllArray)):
+    for i in range(2+lTranscripts, len(all_lines)):
         temp=[]
-        temp = AllArray[i].split("\t");
+        temp = all_lines[i].split("\t");
         ActualTranscriptMap(temp, Transcripts)
         for i in range(1, len(temp)-1):
             if temp[i] in TranscriptInNumOfClassesDict:
@@ -214,19 +251,27 @@ def get_equivalence_class(equivalence_class_file):
 
 
 if __name__ == "__main__":
-    boot_strap_file = "poly_mo/quant_bootstraps.tsv"
-    truth_value_file = "poly_mo/poly_truth.tsv"
-    quant_file = "poly_mo/quant.sf"
-    equivalence_class_file = "poly_mo/eq_classes.txt"
-
-    transcript_quant = get_quant_map(quant_file)
-    bootstarp_transcript_ids, count_matrix = get_bootstrap_transcript_info(boot_strap_file)
-    transcript_truth_count = get_poly_truth_count(truth_value_file)
-    TranscriptInNumOfClassesDict,equiValenceClasses = get_equivalence_class(equivalence_class_file)
     
+    ############ Input Files ######################
+    boot_strap_file = "poly_ro/quant_bootstraps.tsv"
+    truth_value_file = "poly_ro/poly_truth.tsv"
+    quant_file = "poly_ro/quant.sf"
+    equivalence_class_file = "poly_ro/eq_classes.txt"
+
+    ########## Building dict by parsing input files ######################
+    transcript_quant = get_quant_map(quant_file)
+    bootstarp_transcript_ids, count_matrix = get_bootstrap_transcript_info(  \
+        boot_strap_file)
+    transcript_truth_count = get_poly_truth_count(truth_value_file)
+    TranscriptInNumOfClassesDict,equiValenceClasses = get_equivalence_class( \
+        equivalence_class_file)
+   
+    ## Show normal distribution of bootstrap experiment for each transcript_id ##
     show_graph = False
     if len(sys.argv) == 2:
         show_graph = True
 
-    main(bootstarp_transcript_ids, count_matrix, transcript_truth_count, transcript_quant, show_graph, TranscriptInNumOfClassesDict)
+    ############ Calling main #############
+    main(bootstarp_transcript_ids, count_matrix, transcript_truth_count,  \
+        transcript_quant, show_graph, TranscriptInNumOfClassesDict)
 
