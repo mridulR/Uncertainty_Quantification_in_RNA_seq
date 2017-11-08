@@ -7,7 +7,7 @@ from sklearn import linear_model
 from sklearn import svm
 from sklearn.metrics import mean_squared_error, r2_score
 
-def get_covariance(mean_map, transcript_quant, TranscriptInNumOfClassesDict):
+def get_corelation(mean_map, transcript_quant, TranscriptInNumOfClassesDict):
     x_len = []
     x_effec_len = []
     x_tpm = []
@@ -36,7 +36,7 @@ def get_covariance(mean_map, transcript_quant, TranscriptInNumOfClassesDict):
     print("Equivalence class size ", len(y_eq_class))
     print("Co-relation for eq class", np.corrcoef(x_num_eq_class, y_eq_class)[0][1])
 
-    return (np.corrcoef(x_tpm, y)[0][1], np.corrcoef(x_effec_len, y)[0][1], \
+    return (np.corrcoef(x_len, y)[0][1], np.corrcoef(x_effec_len, y)[0][1], \
             np.corrcoef(x_tpm, y)[0][1], np.corrcoef(x_no_of_reads, y)[0][1],\
             np.corrcoef(x_num_eq_class, y_eq_class)[0][1])
 
@@ -50,13 +50,13 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
         col = count_matrix[bootstrap_transcript_ids[ind]]
         mean_map[bootstrap_transcript_ids[ind]] = [np.mean(col), np.std(col)]
 
-    corr = get_covariance(mean_map, transcript_quant, TranscriptInNumOfClassesDict)
+    corr = get_corelation(mean_map, transcript_quant, TranscriptInNumOfClassesDict)
 
     valid_transcripts = open("valid_transcripts", "w")
     invalid_transcripts = open("invalid_transcripts", "w")
     data_file = open("regression_data.csv", "w")
     writer = csv.writer(data_file)
-    writer.writerow(["valid", "count"])
+    writer.writerow(["valid", "count", "A", "B", "C", "D"])
 
     for key in mean_map.keys():
         ##### For running on smaller input size
@@ -103,20 +103,20 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
 
     character_labels = np.array([labels.index(x) for x in character_labels])
     all_features = characters.iloc[:,1:]
-    train_features = all_features[:-200]
+    train_features = all_features[:-2000]
     train_features = np.array(train_features)
 
     classifier = svm.SVC()
-    classifier.fit(train_features, character_labels[:-200])
+    classifier.fit(train_features, character_labels[:-2000])
 
-    results = classifier.predict(all_features[-200:])
-    num_correct = (results == character_labels[-200:]).sum()
-    recall = num_correct / len(character_labels[-200:])
+    results = classifier.predict(all_features[-2000:])
+    num_correct = (results == character_labels[-2000:]).sum()
+    recall = num_correct / len(character_labels[-2000:])
     print("model accuracy (%): ", recall * 100, "%")
 
     # Plot outputs
     #plt.scatter(all_features[-20:][:, 0], characters.iloc[:,:1][-20:] ,  color='black')
-    plt.plot(all_features[-200:], results, color='blue', linewidth=3)
+    plt.plot(all_features[-2000:], results, color='blue', linewidth=3)
 
     plt.xticks(())
     plt.yticks(())
