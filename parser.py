@@ -121,18 +121,7 @@ def write_calculated_data_to_files(mean_map, corr, test_data_count):
 
     data_file.close()
 
-    
-def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
-        transcript_quant, show_graph, TranscriptInNumOfClassesDict):
-    print("Number of transcripts : ", len(bootstrap_transcript_ids))
-    print("Given number of the true reads", len(transcript_truth_count))
- 
-    mean_map = get_mean_and_standard_deviation(bootstrap_transcript_ids)
-    corr = get_corelation(mean_map, transcript_quant, TranscriptInNumOfClassesDict)
-    test_data_count = 2000
-    write_calculated_data_to_files(mean_map, corr, test_data_count)
-    
-    #################   Run Regression/Classification Model  ######################
+def apply_classification_model(test_data_count):
     characters = pd.read_csv("regression_data.csv")
     character_labels = characters.valid
     labels = list(set(character_labels))
@@ -151,14 +140,12 @@ def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
     print("model accuracy (%): ", recall * 100, "%")
 
     # Plot outputs
-    #plt.scatter(all_features[-20:][:, 0], characters.iloc[:,:1][-20:] ,  color='black')
-    plt.plot(all_features[-test_data_count:], results, color='blue', linewidth=3)
-
+    plt.scatter(all_features[-test_data_count:].iloc[:, :1], \
+        characters.iloc[:,:1][-test_data_count:] ,  color='black')
+    plt.plot(all_features[-test_data_count:].iloc[:, -3:].sum(axis=1), results, color='blue', linewidth=3)
     plt.xticks(())
     plt.yticks(())
-
-    plt.show()
-    
+    plt.show() 
 
 def get_quant_map(quant_file):
     print("Parsing Quant File - ", quant_file)
@@ -248,6 +235,18 @@ def get_equivalence_class(equivalence_class_file):
         equiValenceClasses.append(temp)
 
     return(TranscriptInNumOfClassesDict,equiValenceClasses)
+
+
+def main(bootstrap_transcript_ids, count_matrix, transcript_truth_count, \
+        transcript_quant, show_graph, TranscriptInNumOfClassesDict):
+    print("Number of transcripts : ", len(bootstrap_transcript_ids))
+    print("Given number of the true reads", len(transcript_truth_count))
+
+    mean_map = get_mean_and_standard_deviation(bootstrap_transcript_ids)
+    corr = get_corelation(mean_map, transcript_quant, TranscriptInNumOfClassesDict)
+    test_data_count = 2000
+    write_calculated_data_to_files(mean_map, corr, test_data_count)
+    apply_classification_model(test_data_count)
 
 
 if __name__ == "__main__":
