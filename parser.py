@@ -53,7 +53,7 @@ def get_mean_and_standard_deviation(bootstrap_transcript_ids, count_matrix):
 def generate_input_file(mean_map, corr, TranscriptInNumOfClassesDict, transcript_quant):
     data_file = open("input_data.csv", "w")
     writer = csv.writer(data_file)
-    writer.writerow(["count", "tpm", "num_of_reads"])
+    writer.writerow(["transcript_id", "count", "tpm", "num_of_reads"])
 
     for key in mean_map.keys():
         ##### For running on smaller input size
@@ -63,6 +63,7 @@ def generate_input_file(mean_map, corr, TranscriptInNumOfClassesDict, transcript
 
         data_row = [
             ##### equivalence class count for transcript_id
+            str(key),
             int(TranscriptInNumOfClassesDict[key]), \
             #float(transcript_quant[key][0]), \      
             #float(transcript_quant[key][1]), \
@@ -73,6 +74,24 @@ def generate_input_file(mean_map, corr, TranscriptInNumOfClassesDict, transcript
             ]
         writer.writerow(data_row)
     data_file.close()
+
+def calculated_shifted_mean_values(mean_map, corr, test_data_count,
+        TranscriptInNumOfClassesDict, transcript_truth_count, transcript_quant, error_value_map):
+    for key in mean_map.keys():
+        if key not in TranscriptInNumOfClassesDict:
+            continue
+
+    for key in mean_map.keys():
+        ##### For running on smaller input size
+
+        if key not in TranscriptInNumOfClassesDict:
+            continue
+
+        if key in transcript_truth_count:
+            mu, sigma = mean_map[key] # mean and standard deviation
+            meanValue = transcript_truth_count[key]
+            errorValue = meanValue - mu
+            error_value_map[key] = errorValue
 
 
 def write_calculated_data_to_files(mean_map, corr, test_data_count,
@@ -103,7 +122,7 @@ def write_calculated_data_to_files(mean_map, corr, test_data_count,
             meanValue = transcript_truth_count[key]
             errorValue = meanValue - mu
             error_value_map[key] = errorValue
-            row = key + "\t" + str(errorValue) + "\t" + str(mu - 2 * sigma) \
+            row = key + "\t" + str(errorValue) + "\t" + str(meanValue) + "\t" + str(mu - 2 * sigma) \
                     + "\t" + str(mu) + "\t" + str(mu + 2*sigma) + "\n"
             #print("Running for key - ", key, " with row - ", row)
             current_count += 1
@@ -118,26 +137,17 @@ def write_calculated_data_to_files(mean_map, corr, test_data_count,
                         ### number_of_reads ####
                         float(transcript_quant[key][3]) \
                         ]
-            else:
-               data_row = [
-                        int(TranscriptInNumOfClassesDict[key]),\
-                        #float(transcript_quant[key][0]), \
-                        #float(transcript_quant[key][1]), \
-                        float(transcript_quant[key][2]), \
-                        float(transcript_quant[key][3]) \
-                        ] 
-            if meanValue > mu - 2*sigma and meanValue < mu + 2*sigma :
-                valid_transcripts.write(row)
-                success = [errorValue]
-                success.extend(data_row)
-                writer.writerow(success)
-            else:
-                invalid_transcripts.write(row)
-                failed_count += 1
-                failure = [errorValue]
-                failure.extend(data_row)
-                writer.writerow(failure)
-
+                if meanValue > mu - 2*sigma and meanValue < mu + 2*sigma :
+                    valid_transcripts.write(row)
+                    success = [errorValue]
+                    success.extend(data_row)
+                    writer.writerow(success)
+                else:
+                    invalid_transcripts.write(row)
+                    failed_count += 1
+                    failure = [errorValue]
+                    failure.extend(data_row)
+                    writer.writerow(failure)
     data_file.close()
     if test_data_count != 0:
         print("\nTotal failed transcripts - ", str(failed_count))
@@ -154,7 +164,7 @@ def apply_classification_model(test_data_count):
 
     classifier = svm.SVR()
     classifier.fit(train_features, character_labels[:-test_data_count])
-    classifier.predict(all_features[-test_data_count:])
+    #classifier.predict(all_features[-test_data_count:])
     print("\n")
     print("score - ", classifier.score(train_features, character_labels[:-test_data_count]))
 
@@ -295,16 +305,22 @@ def create_combined_model():
         TranscriptInNumOfClassesDict.update(curr_TranscriptInNumOfClassesDict)
         equiValenceClasses.append(curr_equiValenceClasses)
 
-
     print("Number of transcripts : ", len(bootstrap_transcript_ids))
     print("Given number of the true reads", len(transcript_truth_count))
 
     mean_map = get_mean_and_standard_deviation(bootstrap_transcript_ids, count_matrix)
     corr = get_corelation(mean_map, transcript_quant, TranscriptInNumOfClassesDict)
     error_value_map = {}
-    write_calculated_data_to_files(mean_map, corr, 0, TranscriptInNumOfClassesDict,
+
+    calculated_shifted_mean_values(mean_map, corr, 0, TranscriptInNumOfClassesDict,
             transcript_truth_count, transcript_quant, error_value_map)
 
+    shift_mean(mean_map, error_value_map)
+    corr = get_corelation(mean_map, transcript_quant, TranscriptInNumOfClassesDict)
+    error_value_map = {}
+    write_calculated_data_to_files(mean_map, corr, 0, TranscriptInNumOfClassesDict,
+            transcript_truth_count, transcript_quant, error_value_map)
+    
     characters = pd.read_csv("regression_data.csv")
     character_labels = characters.valid
     labels = list(set(character_labels))
@@ -320,7 +336,7 @@ def create_combined_model():
 def main(boot_strap_file, truth_value_file, quant_file,  equivalence_class_file):
 
     ########## Building dict by parsing input files ######################
-
+    
     dir_name = ""
     pt = re.compile(r'(.*)/(.*)')
     dir_name = pt.search(truth_value_file).group(1)
@@ -382,9 +398,9 @@ def load_and_run_model(boot_strap_file, quant_file, equivalence_class_file):
     
 
     characters = pd.read_csv("input_data.csv")
-    all_features = characters.iloc[:,:]
+    all_features = characters.iloc[:,1:]
     print("Predicting label values .......")
-    print(loaded_model.predict(all_features[:]))
+    print("Errors - > ",loaded_model.predict(all_features[:]))
 
     
 
